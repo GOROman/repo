@@ -1,4 +1,7 @@
 repo() {
+    case " ${*} " in
+        *" --list "*|*" --help "*|*" -h "*|*" --shell-init "*) command repo "$@"; return ;;
+    esac
     local selection
     selection="$(command repo "$@")" || return
     [[ -z "$selection" ]] && return

@@ -1,0 +1,77 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: macos-arm64
+          - os: macos-15-intel
+            platform: macos-x86_64
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+      - name: Check tag version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          version = re.search(r'^version = "([^"]+)"', pathlib.Path('Cargo.toml').read_text(), re.M)[1]
+          assert os.environ['TAG'] == 'v' + version, 'Tag must match Cargo.toml version'
+          PY
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --offline -- -D warnings
+      - run: cargo test --locked --offline
+      - run: cargo build --release --locked --offline
+      - run: python3 tests/smoke.py
+      - name: Package
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          mkdir -p dist/package
+          cp target/release/repo README.md LICENSE install.sh dist/package/
+          cp -R scripts dist/package/
+          tar -czf "dist/repo-${PLATFORM}.tar.gz" -C dist/package .
+          python3 - <<'PY'
+          import hashlib, pathlib
+          for p in pathlib.Path('dist').glob('*.tar.gz'):
+              p.with_name(p.name + '.sha256').write_text(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repo-${{ matrix.platform }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" dist/*.tar.gz dist/*.sha256 --verify-tag --title "$TAG" --generate-notes
