@@ -1,0 +1,11 @@
+[package]
+name = "repo"
+version = "0.1.0"
+edition = "2021"
+description = "Fast cached ghq repository picker"
+license = "MIT"
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
