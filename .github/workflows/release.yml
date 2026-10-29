@@ -44,7 +44,7 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           mkdir -p dist/package
-          cp target/release/repo README.md LICENSE install.sh dist/package/
+          cp target/release/repo README.md README.ja.md LICENSE install.sh dist/package/
           cp -R scripts dist/package/
           tar -czf "dist/repo-${PLATFORM}.tar.gz" -C dist/package .
           python3 - <<'PY'
